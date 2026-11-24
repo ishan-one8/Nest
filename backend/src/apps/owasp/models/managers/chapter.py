@@ -13,7 +13,7 @@ class ActiveChapterManager(models.Manager):
 
     @property
     def without_geo_data(self) -> models.QuerySet:
-        """Return chapters that don't have geo data."""
+        """Return chapters without coordinates or a suggested location."""
         return self.get_queryset().filter(
-            Q(latitude__isnull=True) | Q(longitude__isnull=True),
+            Q(latitude__isnull=True) | Q(longitude__isnull=True) | Q(suggested_location=""),
         )

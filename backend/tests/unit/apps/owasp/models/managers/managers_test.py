@@ -33,6 +33,9 @@ class TestActiveChapterManager:
         assert len(args) == 1
         q_obj = args[0]
         assert isinstance(q_obj, Q)
+        assert q_obj == (
+            Q(latitude__isnull=True) | Q(longitude__isnull=True) | Q(suggested_location="")
+        )
         assert result == mock_qs.filter.return_value
 
 

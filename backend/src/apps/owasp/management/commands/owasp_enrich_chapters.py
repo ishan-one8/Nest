@@ -40,11 +40,13 @@ class Command(BaseCommand):
                 chapter.generate_summary(prompt=prompt)
 
             # Suggested location.
+            has_new_suggested_location = False
             if not chapter.suggested_location:
                 chapter.generate_suggested_location()
+                has_new_suggested_location = bool(chapter.suggested_location)
 
             # Geo location.
-            if not chapter.latitude or not chapter.longitude:
+            if has_new_suggested_location or not chapter.latitude or not chapter.longitude:
                 try:
                     chapter.generate_geo_location()
                     time.sleep(5)

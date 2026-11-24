@@ -131,3 +131,46 @@ class TestOwaspEnrichChapters:
 
         mock_bulk_save.assert_called()
         mock_chapter.generate_geo_location.assert_called_once()
+
+    @pytest.mark.parametrize(
+        ("suggested_location", "geocoded"),
+        [
+            ("Saint Louis, Missouri, United States", True),
+            ("", False),
+        ],
+    )
+    @mock.patch.object(Chapter, "bulk_save", autospec=True)
+    def test_handle_chapter_without_suggested_location(
+        self, mock_bulk_save, command, mock_chapter, suggested_location, geocoded
+    ):
+        """Test stored coordinates are replaced only when a location is suggested."""
+        mock_chapter.summary = "Existing summary"
+        mock_chapter.suggested_location = ""
+        mock_chapter.latitude = 46.85
+        mock_chapter.longitude = -92.76
+
+        mock_chapter.generate_suggested_location.side_effect = lambda: setattr(
+            mock_chapter, "suggested_location", suggested_location
+        )
+        mock_chapter.generate_geo_location.side_effect = lambda: (
+            setattr(mock_chapter, "latitude", 38.63) or setattr(mock_chapter, "longitude", -90.19)
+        )
+
+        mock_active_chapters = self._make_active_chapters_qs([mock_chapter])
+
+        with (
+            mock.patch.object(Chapter, "active_chapters", mock_active_chapters),
+            mock.patch("time.sleep", return_value=None),
+        ):
+            command.stdout = mock.MagicMock()
+            command.handle(offset=0)
+
+        mock_chapter.generate_suggested_location.assert_called_once_with()
+        assert mock_chapter.generate_geo_location.called is geocoded
+        assert (mock_chapter.latitude, mock_chapter.longitude) == (
+            (38.63, -90.19) if geocoded else (46.85, -92.76)
+        )
+        mock_bulk_save.assert_called_once_with(
+            [mock_chapter],
+            fields=("latitude", "longitude", "suggested_location", "summary"),
+        )

@@ -216,6 +216,9 @@ class Command(BaseCommand):
             ):
                 continue
             try:
+                # The geo string alone often matches an unrelated place with the same name.
+                if not chapter.suggested_location:
+                    chapter.generate_suggested_location()
                 chapter.generate_geo_location()
             except Exception:
                 logger.exception(

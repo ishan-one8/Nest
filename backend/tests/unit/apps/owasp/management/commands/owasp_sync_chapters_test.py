@@ -56,6 +56,15 @@ class TestOwaspSyncChapters:
 
         monkeypatch.setattr(Chapter, "generate_geo_location", set_coordinates)
 
+    @pytest.fixture(autouse=True)
+    def suggested_location(self, monkeypatch):
+        """Suggest a location without calling OpenAI."""
+
+        def suggest(chapter: Chapter) -> None:
+            chapter.suggested_location = "London, United Kingdom"
+
+        monkeypatch.setattr(Chapter, "generate_suggested_location", suggest)
+
     @pytest.fixture
     def command(self):
         return Command()
@@ -148,6 +157,7 @@ class TestOwaspSyncChapters:
         assert created.key == "london"
         assert created.name == "OWASP London"
         assert created.country == "United Kingdom"
+        assert created.suggested_location == "London, United Kingdom"
         assert created.latitude == 51.5074
         assert created.longitude == -0.1278
 
@@ -351,6 +361,42 @@ class TestOwaspSyncChapters:
         assert mock_chapter.suggested_location == ""
         assert mock_chapter.latitude == 51.5
         assert mock_chapter.longitude == -0.12
+
+    @mock.patch.object(Chapter, "bulk_save", autospec=True)
+    @mock.patch("apps.owasp.api_client.requests.get")
+    def test_suggests_a_location_before_geocoding_a_country_change(
+        self, mock_get, mock_bulk_save, command, mock_chapter
+    ):
+        """Test a country spelling change geocodes the new suggested location."""
+        mock_get.return_value = response(
+            [chapter_record(country="United States", name="OWASP Saint Louis")]
+        )
+        mock_chapter.latitude = 38.6
+        mock_chapter.longitude = -90.2
+        mock_chapter.country = "USA"
+        mock_chapter.region = "Europe"
+        mock_chapter.suggested_location = "Saint Louis, Missouri, United States"
+
+        def suggest() -> None:
+            mock_chapter.suggested_location = "Saint Louis, Missouri, United States"
+
+        geocoded_from = []
+
+        def geocode() -> None:
+            geocoded_from.append(mock_chapter.suggested_location)
+
+        mock_chapter.generate_suggested_location.side_effect = suggest
+        mock_chapter.generate_geo_location.side_effect = geocode
+
+        with mock.patch.object(Chapter, "objects") as mock_objects:
+            mock_objects.select_related.return_value = [mock_chapter]
+            command.stdout = mock.MagicMock()
+            command.handle(offset=0)
+
+        assert mock_chapter.country == "United States"
+        assert mock_chapter.suggested_location == "Saint Louis, Missouri, United States"
+        mock_chapter.generate_suggested_location.assert_called_once_with()
+        assert geocoded_from == ["Saint Louis, Missouri, United States"]
 
     @pytest.mark.parametrize("failure", [TimeoutError("nominatim unavailable"), None])
     @mock.patch.object(Chapter, "bulk_save", autospec=True)
